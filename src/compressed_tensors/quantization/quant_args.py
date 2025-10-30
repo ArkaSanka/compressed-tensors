@@ -14,7 +14,7 @@
 
 import warnings
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any 
 
 import torch
 from compressed_tensors.utils import Aliasable
@@ -39,10 +39,10 @@ __all__ = [
 class FloatArgs:
     exponent: int
     mantissa: int
-    bits: Optional[int] = None
-    max: Optional[float] = None
-    min: Optional[float] = None
-    dtype: Optional[torch.dtype] = None
+    bits: int | None = None
+    max: float | None = None
+    min: float | None = None
+    dtype: torch.dtype | None = None
 
 
 class FP4_E2M1_DATA(FloatArgs):
@@ -138,7 +138,7 @@ class ActivationOrdering(Aliasable, str, Enum):
     STATIC = "static"
 
     @staticmethod
-    def get_aliases() -> Dict[str, str]:
+    def get_aliases() -> dict[str, str]:
         return {
             "dynamic": "group",
             "static": "weight",
@@ -169,19 +169,19 @@ class QuantizationArgs(BaseModel, use_enum_values=True):
     num_bits: int = 8
     type: QuantizationType = QuantizationType.INT
     symmetric: bool = True
-    group_size: Optional[int] = None
-    strategy: Optional[QuantizationStrategy] = None
-    block_structure: Optional[List[int]] = None
-    dynamic: Union[DynamicType, bool] = False
-    actorder: Union[ActivationOrdering, bool, None] = None
-    observer: Optional[str] = Field(
+    group_size: int | None = None
+    strategy: QuantizationStrategy | None = None
+    block_structure: list[int] | None = None
+    dynamic: DynamicType | bool = False
+    actorder: ActivationOrdering | bool | None = None
+    observer: str | None = Field(
         default=None,
         description=(
             "Determines the method of computing quantization parameters (scales and "
             "zero-points). Defaults to min-max when not using dynamic quantization"
         ),
     )
-    observer_kwargs: Dict[str, Any] = Field(
+    observer_kwargs: dict[str, Any] = Field(
         default_factory=dict,
         description=(
             "optional dict of kwargs to be passed directly to torch quantization "
@@ -191,13 +191,14 @@ class QuantizationArgs(BaseModel, use_enum_values=True):
 
     @field_validator("type", mode="before")
     def validate_type(cls, value) -> QuantizationType:
-        if isinstance(value, str):
-            return QuantizationType(value.lower())
-
-        return value
+        match value:
+            case str():
+                return QuantizationType(value.lower())
+            case _:
+                return value
 
     @field_validator("group_size", mode="before")
-    def validate_group(cls, value) -> Union[int, None]:
+    def validate_group(cls, value) -> int | None:
         if value is None:
             return value
 
@@ -210,51 +211,57 @@ class QuantizationArgs(BaseModel, use_enum_values=True):
         return value
 
     @field_validator("block_structure", mode="before")
-    def validate_block_structure(cls, value) -> Optional[List[int]]:
+    def validate_block_structure(cls, value) -> list[int] | None:
         if value is None:
             return value
         # For backward compatibility, allow string format "2x4", "8x16", etc.
-        if isinstance(value, str):
-            try:
-                return [int(x) for x in value.split("x")]
-            except Exception:
+        match value:
+            case str():
+                try:
+                    return [int(x) for x in value.split("x")]
+                except Exception:
+                    raise ValueError(
+                        f"Invalid block_structure '{value}'. Must be a list of ints "
+                        "[rows, cols]."
+                    )
+            case list() | tuple():
+                if len(value) != 2 or not all(isinstance(v, int) for v in value):
+                    raise ValueError(
+                        f"Invalid block_structure '{value}'. Must be a list of ints "
+                        "[rows, cols]."
+                    )
+                return list(value)
+            case _:
                 raise ValueError(
-                    f"Invalid block_structure '{value}'. Must be a list of ints "
-                    "[rows, cols]."
+                    f"Invalid block_structure '{value}'. Must be a list of ints [rows, cols]."
                 )
-        if isinstance(value, (list, tuple)):
-            if len(value) != 2 or not all(isinstance(v, int) for v in value):
-                raise ValueError(
-                    f"Invalid block_structure '{value}'. Must be a list of ints "
-                    "[rows, cols]."
-                )
-            return list(value)
-        raise ValueError(
-            f"Invalid block_structure '{value}'. Must be a list of ints [rows, cols]."
-        )
 
     @field_validator("strategy", mode="before")
-    def validate_strategy(cls, value) -> Union[QuantizationStrategy, None]:
-        if isinstance(value, str):
-            return QuantizationStrategy(value.lower())
-
-        return value
+    def validate_strategy(cls, value) -> QuantizationStrategy | None:
+        match value:
+            case str():
+                return QuantizationStrategy(value.lower())
+            case _:
+                return value
 
     @field_validator("actorder", mode="before")
-    def validate_actorder(cls, value) -> Optional[ActivationOrdering]:
-        if isinstance(value, bool):
-            return ActivationOrdering.GROUP if value else None
+    def validate_actorder(cls, value) -> ActivationOrdering | None:
+        match value:
+            case bool():
+                return ActivationOrdering.GROUP if value else None
 
-        if isinstance(value, str):
-            return ActivationOrdering(value.lower())
-
-        return value
+            case str():
+                return ActivationOrdering(value.lower())
+            case _:
+                return value
 
     @field_validator("dynamic", mode="before")
-    def validate_dynamic(cls, value) -> Union[DynamicType, bool]:
-        if isinstance(value, str):
-            return DynamicType(value.lower())
-        return value
+    def validate_dynamic(cls, value) -> DynamicType | bool:
+        match value:
+            case str():
+                return DynamicType(value.lower())
+            case _:
+                return value
 
     @model_validator(mode="after")
     def validate_model_after(model: "QuantizationArgs") -> "QuantizationArgs":
